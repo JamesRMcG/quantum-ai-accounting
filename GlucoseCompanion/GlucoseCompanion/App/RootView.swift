@@ -13,7 +13,12 @@ struct RootView: View {
     var body: some View {
         Group {
             if let userSettings = settings.first {
-                if userSettings.hasAcceptedDisclaimer {
+                // Both must be true: accepting the disclaimer alone isn't
+                // enough to unlock the app -- target range / max dose setup
+                // (`isConfigured`) still gates the bolus suggestion feature,
+                // and staying in OnboardingFlow until both are set keeps the
+                // guided tour from being torn down partway through.
+                if userSettings.hasAcceptedDisclaimer && userSettings.isConfigured {
                     MainTabView()
                 } else {
                     OnboardingFlow()
