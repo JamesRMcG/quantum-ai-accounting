@@ -33,13 +33,18 @@ struct BolusSuggestionView: View {
 
     private var carbsGrams: Double? { Double(carbsText) }
 
+    private var canCalculate: Bool {
+        guard let carbsGrams else { return false }
+        return carbsGrams > 0
+    }
+
     var body: some View {
         Form {
             Section {
                 disclaimerBanner
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
             }
-            .listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
 
             Section("Meal") {
                 HStack {
@@ -62,7 +67,7 @@ struct BolusSuggestionView: View {
                 }
 
                 Button("Calculate", action: calculate)
-                    .disabled(!(carbsGrams.map { $0 > 0 } ?? false))
+                    .disabled(!canCalculate)
             }
 
             if let viewResult {
