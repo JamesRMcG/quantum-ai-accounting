@@ -6,7 +6,7 @@ import GlucoseCore
 /// package should not hold onto (or require callers to keep alive) a
 /// managed-object reference any longer than the moment of calculation, and
 /// the UI/history layer only ever needs these few fields to explain "why".
-public struct TimeOfDayProfileSnapshot: Sendable, Equatable {
+public struct TimeOfDayProfileSnapshot: Sendable {
     public let blockName: String
     public let carbRatio: Double
     public let correctionFactor: Double
@@ -31,7 +31,7 @@ public struct TimeOfDayProfileSnapshot: Sendable, Equatable {
 /// Non-fatal conditions attached to an otherwise-valid suggestion. These
 /// are surfaced to the user, never swallowed -- e.g. a clamp to max dose
 /// must always be visible, not silently applied.
-public enum BolusWarning: Sendable, Equatable {
+public enum BolusWarning: Sendable {
     /// The raw computed dose exceeded `maxBolusUnits` and was clamped down
     /// to it. Carries the pre-clamp value so the UI can show both numbers.
     case exceedsMaxDose(clampedFrom: Double)
@@ -46,7 +46,7 @@ public enum BolusWarning: Sendable, Equatable {
 /// A suggested bolus dose, always carrying its full breakdown so the UI
 /// can show its work rather than a bare number. This is a suggestion only
 /// -- nothing in this package delivers it anywhere.
-public struct BolusSuggestion: Sendable, Equatable {
+public struct BolusSuggestion: Sendable {
     public let suggestedUnits: Double
     public let carbComponentUnits: Double
     public let correctionComponentUnits: Double

@@ -27,30 +27,33 @@ public enum CarbRatioEstimator {
         targetMidpointMgdl: Double,
         minimumDataPoints: Int = 8
     ) -> RatioEstimate? {
-        let qualifying = events.filter { event in
-            guard !event.isConfounded else { return false }
-            guard let pre = event.preGlucoseMgdl else { return false }
-            return abs(pre - targetMidpointMgdl) <= preGlucoseToleranceMgdl
+        // Built as a single compactMap so the grams/units arrays fed to the
+        // regression stay index-aligned and the same length by construction.
+        let samples: [(grams: Double, units: Double)] = events.compactMap { event in
+            guard !event.isConfounded else { return nil }
+            guard let pre = event.preGlucoseMgdl,
+                  abs(pre - targetMidpointMgdl) <= preGlucoseToleranceMgdl else { return nil }
+            return (event.carbEntry.grams, event.bolusDose.units)
         }
 
-        guard qualifying.count >= minimumDataPoints else { return nil }
-
-        let grams = qualifying.map(\.carbEntry.grams)
-        let units = qualifying.map(\.bolusDose.units)
+        guard samples.count >= minimumDataPoints else { return nil }
 
         // units = slope * grams, forced through the origin (see
         // LinearRegression for why); carb ratio is grams-per-unit, i.e. the
         // reciprocal of units-per-gram.
-        guard let fit = LinearRegression.fitThroughOrigin(x: grams, y: units), fit.slope > 0 else {
+        guard let fit = LinearRegression.fitThroughOrigin(
+            x: samples.map(\.grams),
+            y: samples.map(\.units)
+        ), fit.slope > 0 else {
             return nil
         }
 
         let gramsPerUnit = 1.0 / fit.slope
         return RatioEstimate(
             value: gramsPerUnit,
-            dataPointCount: qualifying.count,
+            dataPointCount: samples.count,
             rSquared: fit.rSquared,
-            confidence: RatioEstimate.confidence(forDataPointCount: qualifying.count)
+            confidence: RatioEstimate.confidence(forDataPointCount: samples.count)
         )
     }
 }

@@ -29,34 +29,37 @@ public enum CorrectionFactorEstimator {
         // correction signal -- at or below target there was (by
         // definition) nothing to correct, so including them would just add
         // zero-or-noisy x values without any corresponding "correction
-        // work" in the dose.
-        let qualifying = events.filter { event in
-            guard !event.isConfounded else { return false }
-            guard let pre = event.preGlucoseMgdl else { return false }
-            return pre > targetMidpointMgdl
-        }
+        // work" in the dose. Built as a single compactMap (rather than a
+        // filter followed by two separate maps) so the excess-glucose and
+        // correction-units arrays fed to the regression are guaranteed to
+        // stay index-aligned and the same length by construction.
+        let samples: [(excessGlucose: Double, correctionUnits: Double)] = events.compactMap { event in
+            guard !event.isConfounded else { return nil }
+            guard let pre = event.preGlucoseMgdl, pre > targetMidpointMgdl else { return nil }
 
-        guard qualifying.count >= minimumDataPoints else { return nil }
-
-        let excessGlucose = qualifying.map { $0.preGlucoseMgdl! - targetMidpointMgdl }
-        let correctionUnits = qualifying.map { event -> Double in
             let carbCoveringUnits = carbRatio.map { event.carbEntry.grams / $0 } ?? 0
-            return event.bolusDose.units - carbCoveringUnits
+            let correctionUnits = event.bolusDose.units - carbCoveringUnits
+            return (pre - targetMidpointMgdl, correctionUnits)
         }
+
+        guard samples.count >= minimumDataPoints else { return nil }
 
         // correctionUnits = slope * excessGlucose, forced through the
         // origin (see LinearRegression): zero glucose above target should
         // mean zero correction units, by definition of "correction".
-        guard let fit = LinearRegression.fitThroughOrigin(x: excessGlucose, y: correctionUnits), fit.slope > 0 else {
+        guard let fit = LinearRegression.fitThroughOrigin(
+            x: samples.map(\.excessGlucose),
+            y: samples.map(\.correctionUnits)
+        ), fit.slope > 0 else {
             return nil
         }
 
         let mgdlPerUnit = 1.0 / fit.slope
         return RatioEstimate(
             value: mgdlPerUnit,
-            dataPointCount: qualifying.count,
+            dataPointCount: samples.count,
             rSquared: fit.rSquared,
-            confidence: RatioEstimate.confidence(forDataPointCount: qualifying.count)
+            confidence: RatioEstimate.confidence(forDataPointCount: samples.count)
         )
     }
 }
