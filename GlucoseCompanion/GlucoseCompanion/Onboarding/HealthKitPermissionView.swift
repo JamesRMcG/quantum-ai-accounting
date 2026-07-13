@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import GlucoseCore
 
 /// Explains and requests HealthKit access during onboarding. Denial or
 /// partial denial is never allowed to block the rest of onboarding -- the
@@ -32,7 +33,7 @@ struct HealthKitPermissionView: View {
                 }
                 .padding(.vertical, 4)
 
-                Text("You can change any of these permissions at any time in the iOS Settings app, or revisit this screen later from GlucoseCompanion's own Settings tab.")
+                Text("You can change any of these permissions at any time from the iOS Settings app, under Health > Data Access & Devices.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -109,4 +110,12 @@ struct HealthKitPermissionView: View {
             }
         }
     }
+}
+
+#Preview {
+    NavigationStack {
+        HealthKitPermissionView(onContinue: {})
+    }
+    .modelContainer(for: UserSettings.self, inMemory: true)
+    .environment(AppContainer())
 }

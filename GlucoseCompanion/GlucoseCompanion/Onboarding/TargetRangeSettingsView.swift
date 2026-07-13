@@ -6,6 +6,13 @@ import GlucoseCore
 /// as an onboarding step and embedded directly in `SettingsView` -- callers
 /// pass the `UserSettings` row to edit and, optionally, a completion closure.
 ///
+/// Body is a bare sequence of `Section`s rather than its own `Form` (SwiftUI's
+/// `View.body` is an implicit `@ViewBuilder`, so multiple top-level `Section`s
+/// are legal and flatten correctly into whichever `Form`/`List` the caller
+/// provides) -- that lets `SettingsView` fold these sections directly into
+/// its own `Form` instead of nesting one `Form` inside another. Full-screen
+/// callers (onboarding) wrap it in their own `Form`.
+///
 /// `isConfigured` is only ever set `true` here, and only once this view's own
 /// validation passes -- it is the single gate the bolus calculator checks
 /// before it will produce a suggestion, so it must never flip true on
@@ -23,7 +30,7 @@ struct TargetRangeSettingsView: View {
     @State private var didLoad = false
 
     var body: some View {
-        Form {
+        Group {
             Section {
                 Text("These values are used to size bolus suggestions and to flag out-of-range readings. Confirm them with your endocrinologist or diabetes care team before relying on them.")
                     .font(.footnote)

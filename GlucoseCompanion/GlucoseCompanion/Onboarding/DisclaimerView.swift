@@ -112,4 +112,5 @@ struct DisclaimerView: View {
     NavigationStack {
         DisclaimerView()
     }
+    .modelContainer(for: UserSettings.self, inMemory: true)
 }
