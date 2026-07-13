@@ -277,8 +277,8 @@ public final class AnchoredQuerySync {
         in context: ModelContext
     ) {
         guard !uuids.isEmpty else { return }
-        guard let descriptor = try? FetchDescriptor<GlucoseReading>(predicate: #Predicate { $0.healthKitUUID != nil }),
-              let candidates = try? context.fetch(descriptor) else { return }
+        let descriptor = FetchDescriptor<GlucoseReading>(predicate: #Predicate { $0.healthKitUUID != nil })
+        guard let candidates = try? context.fetch(descriptor) else { return }
         for record in candidates {
             if let uuid = record.healthKitUUID, uuids.contains(uuid) {
                 context.delete(record)
@@ -292,8 +292,8 @@ public final class AnchoredQuerySync {
         in context: ModelContext
     ) {
         guard !uuids.isEmpty else { return }
-        guard let descriptor = try? FetchDescriptor<CarbEntry>(predicate: #Predicate { $0.healthKitUUID != nil }),
-              let candidates = try? context.fetch(descriptor) else { return }
+        let descriptor = FetchDescriptor<CarbEntry>(predicate: #Predicate { $0.healthKitUUID != nil })
+        guard let candidates = try? context.fetch(descriptor) else { return }
         for record in candidates {
             if let uuid = record.healthKitUUID, uuids.contains(uuid) {
                 context.delete(record)
@@ -307,8 +307,8 @@ public final class AnchoredQuerySync {
         in context: ModelContext
     ) {
         guard !uuids.isEmpty else { return }
-        guard let descriptor = try? FetchDescriptor<InsulinDose>(predicate: #Predicate { $0.healthKitUUID != nil }),
-              let candidates = try? context.fetch(descriptor) else { return }
+        let descriptor = FetchDescriptor<InsulinDose>(predicate: #Predicate { $0.healthKitUUID != nil })
+        guard let candidates = try? context.fetch(descriptor) else { return }
         for record in candidates {
             if let uuid = record.healthKitUUID, uuids.contains(uuid) {
                 context.delete(record)
