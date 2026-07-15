@@ -41,6 +41,39 @@ public enum BolusWarning: Sendable {
     /// The time-block profile used has low or insufficient confidence
     /// (not enough learned data, or still on defaults).
     case lowConfidenceProfile(confidence: ConfidenceLevel)
+    /// The correction component used a learned, activity-adjusted
+    /// correction factor (see `ActivityAdjustedCorrectionFactor`) instead of
+    /// the block's normal one -- always flagged, never applied silently.
+    /// Carries both values so the UI can show exactly what changed.
+    case activityAdjustedCorrectionApplied(
+        baselineMgdlPerUnit: Double,
+        adjustedMgdlPerUnit: Double,
+        confidence: ConfidenceLevel,
+        dataPointCount: Int
+    )
+}
+
+/// A learned correction factor (mg/dL drop per unit) specific to occasions
+/// when the person indicates they plan to be physically active after a
+/// correction dose, as opposed to the block's normal (non-activity)
+/// correction factor. Computed entirely outside this package (see the
+/// `CorrectionLearning` package) from historical correction-only doses and
+/// their outcomes; passed in here as plain data so this package's own
+/// dependency graph stays limited to `GlucoseCore`.
+///
+/// `BolusCalculator.calculate` only ever uses this to make a correction
+/// SMALLER than the block's baseline, never larger -- see the doc comment
+/// on `calculate` for why.
+public struct ActivityAdjustedCorrectionFactor: Sendable {
+    public let mgdlPerUnit: Double
+    public let confidence: ConfidenceLevel
+    public let dataPointCount: Int
+
+    public init(mgdlPerUnit: Double, confidence: ConfidenceLevel, dataPointCount: Int) {
+        self.mgdlPerUnit = mgdlPerUnit
+        self.confidence = confidence
+        self.dataPointCount = dataPointCount
+    }
 }
 
 /// A suggested bolus dose, always carrying its full breakdown so the UI

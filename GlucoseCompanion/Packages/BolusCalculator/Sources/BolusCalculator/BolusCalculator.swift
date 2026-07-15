@@ -40,6 +40,22 @@ public enum BolusCalculator {
     ///     whether the new suggestion looks unusually large.
     ///   - allBolusDosesForIOB: Bolus doses within the IOB lookback window,
     ///     used to compute currently-active insulin.
+    ///   - activityAdjustedCorrectionFactor: An optional learned correction
+    ///     factor specific to "I plan to be active after this" (see
+    ///     `ActivityAdjustedCorrectionFactor`'s doc comment). Deliberately
+    ///     one-directional: it is only ever used when it implies a HIGHER
+    ///     mg/dL-per-unit sensitivity than the block's baseline (i.e. a
+    ///     smaller correction dose) and its confidence is not
+    ///     `.insufficientData` -- the entire point is avoiding a low when
+    ///     activity is planned, not second-guessing the baseline upward
+    ///     from what could be statistical noise in the other direction.
+    ///     When it would imply a *lower* sensitivity (larger dose), or has
+    ///     insufficient data, it is silently ignored and the block's normal
+    ///     correction factor is used exactly as if this parameter were nil.
+    ///     Its effect is also capped (see `maxActivityAdjustmentMultiple`)
+    ///     so a single outlier fit can't swing the dose too far, and its use
+    ///     is always surfaced via `.activityAdjustedCorrectionApplied`,
+    ///     never applied silently.
     public static func calculate(
         carbsGrams: Double,
         currentGlucoseMgdl: Double,
@@ -48,8 +64,14 @@ public enum BolusCalculator {
         settings: UserSettings,
         profile: TimeOfDayProfile,
         recentBolusDoses: [InsulinDose],
-        allBolusDosesForIOB: [InsulinDose]
+        allBolusDosesForIOB: [InsulinDose],
+        activityAdjustedCorrectionFactor: ActivityAdjustedCorrectionFactor? = nil
     ) -> BolusCalculationResult {
+
+        // Caps how much smaller the activity-adjusted correction factor can
+        // make the dose relative to the block's baseline (2x the mg/dL-per-
+        // unit value means, at most, half the baseline correction units).
+        let maxActivityAdjustmentMultiple = 2.0
 
         // Gate 1: hasn't finished setup, or has a max dose of 0/negative
         // (0 is not a usable ceiling -- treat it the same as unconfigured).
@@ -77,8 +99,24 @@ public enum BolusCalculator {
             return .refusedProfileNotReady
         }
 
+        // Only ever move the correction factor UP from baseline (higher
+        // mg/dL-per-unit = each unit does more work = a smaller correction),
+        // and only when there's actually enough data behind it -- see the
+        // parameter doc comment on `calculate` for the full reasoning.
+        var effectiveCorrectionFactor = correctionFactor
+        var appliedActivityAdjustment: ActivityAdjustedCorrectionFactor?
+        if let activityAdjustedCorrectionFactor,
+           activityAdjustedCorrectionFactor.confidence != .insufficientData,
+           activityAdjustedCorrectionFactor.mgdlPerUnit > correctionFactor {
+            effectiveCorrectionFactor = min(
+                activityAdjustedCorrectionFactor.mgdlPerUnit,
+                correctionFactor * maxActivityAdjustmentMultiple
+            )
+            appliedActivityAdjustment = activityAdjustedCorrectionFactor
+        }
+
         let carbComponent = carbsGrams / carbRatio
-        let correctionComponent = max(0, currentGlucoseMgdl - settings.targetMidpointMgdl) / correctionFactor
+        let correctionComponent = max(0, currentGlucoseMgdl - settings.targetMidpointMgdl) / effectiveCorrectionFactor
         let insulinOnBoard = InsulinOnBoardModel.currentIOB(
             bolusDoses: allBolusDosesForIOB,
             at: now,
@@ -88,6 +126,15 @@ public enum BolusCalculator {
         let rawUnits = max(0, carbComponent + correctionComponent - insulinOnBoard)
 
         var warnings: [BolusWarning] = []
+
+        if let appliedActivityAdjustment {
+            warnings.append(.activityAdjustedCorrectionApplied(
+                baselineMgdlPerUnit: correctionFactor,
+                adjustedMgdlPerUnit: effectiveCorrectionFactor,
+                confidence: appliedActivityAdjustment.confidence,
+                dataPointCount: appliedActivityAdjustment.dataPointCount
+            ))
+        }
 
         let (clampedUnits, wasClamped) = SafetyGuardrails.clamp(rawUnits, maxBolusUnits: settings.maxBolusUnits)
         if wasClamped {
