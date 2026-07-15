@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import GlucoseCore
 import RatioLearning
+import ActivityInsights
 
 struct LearnedRatiosView: View {
     @Environment(\.modelContext) private var modelContext
@@ -96,11 +97,42 @@ private struct ProfileCard: View {
 
     @Environment(\.modelContext) private var modelContext
     @Query private var settingsRows: [UserSettings]
+    @Query private var carbEntries: [CarbEntry]
+    @Query private var insulinDoses: [InsulinDose]
+    @Query private var glucoseReadings: [GlucoseReading]
+    @Query private var stepSamples: [StepSample]
+    @Query private var workouts: [WorkoutSession]
 
     @State private var carbOverrideText: String = ""
     @State private var correctionOverrideText: String = ""
 
     private var glucoseUnit: GlucoseUnit { settingsRows.first?.glucoseUnit ?? .mgdl }
+
+    /// Meal events whose anchor time falls within this specific block's hour
+    /// range -- unlike `ActivityTrendView` (which looks at all meals), the
+    /// "By Activity Level" subsection below needs per-block estimates, so
+    /// events are filtered to this block before activity contexts/estimates
+    /// are built.
+    private var blockMealEvents: [MealEvent] {
+        let allEvents = MealExcursionMatcher.extractEvents(
+            carbEntries: carbEntries,
+            insulinDoses: insulinDoses,
+            glucoseReadings: glucoseReadings,
+            excludeWindows: workouts.map(\.interval)
+        )
+        return allEvents.filter { profile.contains(hour: Calendar.current.component(.hour, from: $0.anchorTime)) }
+    }
+
+    private var blockActivityContexts: [MealActivityContext] {
+        ActivityContextBuilder.buildContexts(mealEvents: blockMealEvents, stepSamples: stepSamples)
+    }
+
+    private var blockActivityProfiles: [ActivityAdjustedProfile] {
+        ActivityAdjustedRatioEstimator.estimate(
+            contexts: blockActivityContexts,
+            targetMidpointMgdl: settingsRows.first?.targetMidpointMgdl ?? 125
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -165,8 +197,60 @@ private struct ProfileCard: View {
                 onSet: applyCorrectionOverride,
                 onClear: clearCorrectionOverride
             )
+
+            Divider()
+
+            activityAdjustedSection
         }
         .padding(.vertical, 4)
+    }
+
+    /// Purely informational context split by activity level around meals in
+    /// this block -- it never changes the block's learned/override ratio
+    /// shown above, and nothing here feeds into bolus dosing.
+    private var activityAdjustedSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("By Activity Level", systemImage: "figure.walk")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+            Text("Informational context only, split by how active you were around each meal -- it does not change the ratio used above.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            ForEach(ActivityBucket.allCases, id: \.self) { bucket in
+                activityBucketRow(bucket)
+            }
+        }
+    }
+
+    private func activityBucketRow(_ bucket: ActivityBucket) -> some View {
+        let bucketProfile = blockActivityProfiles.first(where: { $0.bucket == bucket })
+
+        return HStack {
+            Text(bucket.displayName)
+                .font(.caption)
+                .frame(width: 100, alignment: .leading)
+
+            if let carbRatio = bucketProfile?.carbRatio {
+                Text("\(String(format: "%.1f", carbRatio.value)) g/u")
+                    .font(.caption)
+            } else {
+                Text("--")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if let correctionFactor = bucketProfile?.correctionFactor {
+                Text("\(GlucoseFormatting.perUnitValueString(mgdlPerUnit: correctionFactor.value, unit: glucoseUnit)) \(GlucoseFormatting.perUnitLabel(glucoseUnit))")
+                    .font(.caption)
+            } else {
+                Text("Not enough data")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     private var confidenceBadge: some View {
