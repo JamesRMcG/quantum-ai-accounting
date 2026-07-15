@@ -364,28 +364,35 @@ public final class AnchoredQuerySync {
 
     // MARK: - Dedup / delete helpers
 
+    // Deliberately no `#Predicate` filtering on `healthKitUUID != nil` here --
+    // comparing an optional UUID to `nil` inside `#Predicate` is a known
+    // SwiftData crash (SIGABRT) on some OS versions. Fetching everything and
+    // filtering with plain `compactMap`/`if let` in Swift is slightly less
+    // efficient but unconditionally safe, and these tables are small enough
+    // (a personal health app's own history) for that not to matter.
+
     private static func existingHealthKitUUIDs(_ type: GlucoseReading.Type, in context: ModelContext) throws -> Set<UUID> {
-        let descriptor = FetchDescriptor<GlucoseReading>(predicate: #Predicate { $0.healthKitUUID != nil })
+        let descriptor = FetchDescriptor<GlucoseReading>()
         return Set(try context.fetch(descriptor).compactMap(\.healthKitUUID))
     }
 
     private static func existingHealthKitUUIDs(_ type: CarbEntry.Type, in context: ModelContext) throws -> Set<UUID> {
-        let descriptor = FetchDescriptor<CarbEntry>(predicate: #Predicate { $0.healthKitUUID != nil })
+        let descriptor = FetchDescriptor<CarbEntry>()
         return Set(try context.fetch(descriptor).compactMap(\.healthKitUUID))
     }
 
     private static func existingHealthKitUUIDs(_ type: InsulinDose.Type, in context: ModelContext) throws -> Set<UUID> {
-        let descriptor = FetchDescriptor<InsulinDose>(predicate: #Predicate { $0.healthKitUUID != nil })
+        let descriptor = FetchDescriptor<InsulinDose>()
         return Set(try context.fetch(descriptor).compactMap(\.healthKitUUID))
     }
 
     private static func existingHealthKitUUIDs(_ type: WorkoutSession.Type, in context: ModelContext) throws -> Set<UUID> {
-        let descriptor = FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.healthKitUUID != nil })
+        let descriptor = FetchDescriptor<WorkoutSession>()
         return Set(try context.fetch(descriptor).compactMap(\.healthKitUUID))
     }
 
     private static func existingHealthKitUUIDs(_ type: StepSample.Type, in context: ModelContext) throws -> Set<UUID> {
-        let descriptor = FetchDescriptor<StepSample>(predicate: #Predicate { $0.healthKitUUID != nil })
+        let descriptor = FetchDescriptor<StepSample>()
         return Set(try context.fetch(descriptor).compactMap(\.healthKitUUID))
     }
 
@@ -395,7 +402,7 @@ public final class AnchoredQuerySync {
         in context: ModelContext
     ) {
         guard !uuids.isEmpty else { return }
-        let descriptor = FetchDescriptor<GlucoseReading>(predicate: #Predicate { $0.healthKitUUID != nil })
+        let descriptor = FetchDescriptor<GlucoseReading>()
         guard let candidates = try? context.fetch(descriptor) else { return }
         for record in candidates {
             if let uuid = record.healthKitUUID, uuids.contains(uuid) {
@@ -410,7 +417,7 @@ public final class AnchoredQuerySync {
         in context: ModelContext
     ) {
         guard !uuids.isEmpty else { return }
-        let descriptor = FetchDescriptor<CarbEntry>(predicate: #Predicate { $0.healthKitUUID != nil })
+        let descriptor = FetchDescriptor<CarbEntry>()
         guard let candidates = try? context.fetch(descriptor) else { return }
         for record in candidates {
             if let uuid = record.healthKitUUID, uuids.contains(uuid) {
@@ -425,7 +432,7 @@ public final class AnchoredQuerySync {
         in context: ModelContext
     ) {
         guard !uuids.isEmpty else { return }
-        let descriptor = FetchDescriptor<InsulinDose>(predicate: #Predicate { $0.healthKitUUID != nil })
+        let descriptor = FetchDescriptor<InsulinDose>()
         guard let candidates = try? context.fetch(descriptor) else { return }
         for record in candidates {
             if let uuid = record.healthKitUUID, uuids.contains(uuid) {
@@ -440,7 +447,7 @@ public final class AnchoredQuerySync {
         in context: ModelContext
     ) {
         guard !uuids.isEmpty else { return }
-        let descriptor = FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.healthKitUUID != nil })
+        let descriptor = FetchDescriptor<WorkoutSession>()
         guard let candidates = try? context.fetch(descriptor) else { return }
         for record in candidates {
             if let uuid = record.healthKitUUID, uuids.contains(uuid) {
@@ -455,7 +462,7 @@ public final class AnchoredQuerySync {
         in context: ModelContext
     ) {
         guard !uuids.isEmpty else { return }
-        let descriptor = FetchDescriptor<StepSample>(predicate: #Predicate { $0.healthKitUUID != nil })
+        let descriptor = FetchDescriptor<StepSample>()
         guard let candidates = try? context.fetch(descriptor) else { return }
         for record in candidates {
             if let uuid = record.healthKitUUID, uuids.contains(uuid) {
