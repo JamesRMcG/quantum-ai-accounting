@@ -15,6 +15,9 @@ struct BolusReviewSheet: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Query private var settingsRows: [UserSettings]
+
+    private var glucoseUnit: GlucoseUnit { settingsRows.first?.glucoseUnit ?? .mgdl }
 
     @State private var unitsText: String
     // The carb-grams field on `BolusSuggestionView` is only an input to the
@@ -131,6 +134,8 @@ struct BolusReviewSheet: View {
             return "This is unusually high vs. your recent average of \(Self.formattedUnits(recentAverage))u."
         case .lowConfidenceProfile(let confidence):
             return "This time block's ratios are \(confidenceLabel(confidence)) confidence -- double check before dosing."
+        case .activityAdjustedCorrectionApplied(let baseline, let adjusted, let confidence, let dataPointCount):
+            return "Correction reduced for planned activity: \(GlucoseFormatting.perUnitValueString(mgdlPerUnit: adjusted, unit: glucoseUnit))/u instead of your usual \(GlucoseFormatting.perUnitValueString(mgdlPerUnit: baseline, unit: glucoseUnit))/u, based on \(dataPointCount) past corrections followed by activity (\(confidenceLabel(confidence)) confidence)."
         }
     }
 
