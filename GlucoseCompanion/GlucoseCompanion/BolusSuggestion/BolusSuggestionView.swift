@@ -2,12 +2,17 @@ import SwiftUI
 import SwiftData
 import GlucoseCore
 import BolusCalculator
+import RatioLearning
+import CorrectionLearning
 
 struct BolusSuggestionView: View {
     @Query(sort: \GlucoseReading.timestamp, order: .reverse) private var allReadings: [GlucoseReading]
     @Query private var settingsRows: [UserSettings]
     @Query private var profiles: [TimeOfDayProfile]
     @Query(sort: \InsulinDose.timestamp, order: .reverse) private var allDoses: [InsulinDose]
+    @Query private var carbEntries: [CarbEntry]
+    @Query private var stepSamples: [StepSample]
+    @Query private var workouts: [WorkoutSession]
 
     /// Wraps `BolusCalculationResult` with the one failure mode that isn't
     /// (and can't be) one of its cases: no glucose reading exists at all, so
@@ -19,6 +24,7 @@ struct BolusSuggestionView: View {
     }
 
     @State private var carbsText: String = ""
+    @State private var planningToBeActive: Bool = false
     @State private var viewResult: ViewResult?
     @State private var showingReview = false
     @State private var pendingSuggestionID: UUID?
@@ -52,6 +58,13 @@ struct BolusSuggestionView: View {
                     TextField("Carb grams", text: $carbsText)
                         .keyboardType(.decimalPad)
                     Text("g")
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Toggle("I plan to be active after this", isOn: $planningToBeActive)
+                    Text("If checked and you have enough correction history, the correction dose may be reduced -- see below.")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
@@ -227,6 +240,8 @@ struct BolusSuggestionView: View {
             return "Unusually high vs. your recent average of \(formattedUnits(recentAverage))u."
         case .lowConfidenceProfile(let confidence):
             return "This time block's ratios are \(confidenceLabel(confidence)) confidence."
+        case .activityAdjustedCorrectionApplied(let baseline, let adjusted, let confidence, let dataPointCount):
+            return "Correction reduced for planned activity: \(GlucoseFormatting.perUnitValueString(mgdlPerUnit: adjusted, unit: glucoseUnit))/u instead of your usual \(GlucoseFormatting.perUnitValueString(mgdlPerUnit: baseline, unit: glucoseUnit))/u, based on \(dataPointCount) past corrections followed by activity (\(confidenceLabel(confidence)) confidence)."
         }
     }
 
@@ -262,6 +277,40 @@ struct BolusSuggestionView: View {
         let recentBolusDoses = bolusDoses.filter { $0.timestamp >= recentHistoryLookback && $0.timestamp <= now }
         let allBolusDosesForIOB = bolusDoses.filter { $0.timestamp >= iobLookback && $0.timestamp <= now }
 
+        // Only bother building the correction-learning pipeline when the
+        // toggle is on -- when it's off, `nil` preserves the exact baseline
+        // behavior `BolusCalculator.calculate` already had.
+        var activityAdjustedFactor: ActivityAdjustedCorrectionFactor?
+        if planningToBeActive {
+            let mealEvents = MealExcursionMatcher.extractEvents(
+                carbEntries: carbEntries,
+                insulinDoses: allDoses,
+                glucoseReadings: allReadings
+            )
+            let correctionEvents = CorrectionEventExtractor.extractEvents(
+                insulinDoses: allDoses,
+                glucoseReadings: allReadings,
+                stepSamples: stepSamples,
+                workouts: workouts,
+                mealEvents: mealEvents,
+                targetRangeLowMgdl: settings.targetRangeLowMgdl,
+                targetRangeHighMgdl: settings.targetRangeHighMgdl,
+                lowGlucoseSafetyFloorMgdl: settings.lowGlucoseSafetyFloorMgdl,
+                insulinActionDurationMinutes: settings.insulinActionDurationMinutes
+            )
+            let sensitivity = CorrectionSensitivityEstimator.estimate(
+                events: correctionEvents,
+                targetMidpointMgdl: settings.targetMidpointMgdl
+            )
+            if let withActivity = sensitivity.withActivity {
+                activityAdjustedFactor = ActivityAdjustedCorrectionFactor(
+                    mgdlPerUnit: withActivity.value,
+                    confidence: withActivity.confidence,
+                    dataPointCount: withActivity.dataPointCount
+                )
+            }
+        }
+
         let result = BolusCalculator.calculate(
             carbsGrams: carbsGrams,
             currentGlucoseMgdl: latestReading.mgdl,
@@ -270,7 +319,8 @@ struct BolusSuggestionView: View {
             settings: settings,
             profile: activeProfile,
             recentBolusDoses: recentBolusDoses,
-            allBolusDosesForIOB: allBolusDosesForIOB
+            allBolusDosesForIOB: allBolusDosesForIOB,
+            activityAdjustedCorrectionFactor: activityAdjustedFactor
         )
         viewResult = .calculation(result)
     }
