@@ -6,6 +6,14 @@ import SwiftData
 /// incremental syncs keep running while the app isn't in the foreground.
 /// Call `start` once, at app launch, after HealthKit authorization has
 /// already been requested.
+///
+/// `@MainActor` because it owns an `AnchoredQuerySync` (itself `@MainActor`,
+/// since it touches a SwiftData `ModelContext`) -- without this, even just
+/// constructing `AnchoredQuerySync()` as a stored property default is a
+/// compile error ("main actor-isolated initializer in a synchronous
+/// nonisolated context"), since this type's own `init` would otherwise be
+/// nonisolated.
+@MainActor
 public final class BackgroundDeliveryManager {
     private let sync = AnchoredQuerySync()
 
