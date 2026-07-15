@@ -18,10 +18,10 @@ This repo contains the Swift source for GlucoseCompanion, but **not** an `.xcode
 
 ## 2. Add the local Swift Packages
 
-For each of the seven packages under `GlucoseCompanion/Packages/`:
+For each of the eight packages under `GlucoseCompanion/Packages/`:
 
-1. In Xcode: **File → Add Package Dependencies… → Add Local…**, and select each package folder (`Packages/GlucoseCore`, `Packages/HealthKitSync`, `Packages/DexcomShareClient`, `Packages/GlucoseAnalytics`, `Packages/RatioLearning`, `Packages/BolusCalculator`, `Packages/ActivityInsights`).
-2. Add all seven as dependencies of the `GlucoseCompanion` app target (Target → General → Frameworks, Libraries, and Embedded Content → +).
+1. In Xcode: **File → Add Package Dependencies… → Add Local…**, and select each package folder (`Packages/GlucoseCore`, `Packages/HealthKitSync`, `Packages/DexcomShareClient`, `Packages/GlucoseAnalytics`, `Packages/RatioLearning`, `Packages/BolusCalculator`, `Packages/ActivityInsights`, `Packages/CorrectionLearning`).
+2. Add all eight as dependencies of the `GlucoseCompanion` app target (Target → General → Frameworks, Libraries, and Embedded Content → +).
 
 Each package's `Package.swift` already declares its local dependencies (e.g. `ActivityInsights` depends on both `GlucoseCore` and `RatioLearning`) via a relative local path, so Xcode should resolve the graph automatically once all seven are added.
 
