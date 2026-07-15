@@ -59,6 +59,19 @@ public final class AnchoredQuerySync {
         static let steps = "steps"
     }
 
+    /// `BackgroundDeliveryManager` registers one `HKObserverQuery` per
+    /// observed type (glucose, carbs, insulin, workouts, heart rate, steps),
+    /// and each independently triggers a full `runIncrementalSync` call.
+    /// Being `@MainActor` prevents two calls from literally running at the
+    /// same instant, but it does NOT prevent them from *interleaving* at
+    /// `await` suspension points -- a second call can still read the "before"
+    /// state, suspend, and resume after a first call already changed that
+    /// same state, corrupting SwiftData's internal object registration. This
+    /// flag makes overlapping sync requests coalesce (skip) instead of
+    /// interleave: safe because a skipped request's changes will simply be
+    /// picked up the next time any observer fires.
+    private var isSyncing = false
+
     /// Bounded first-run sync covering the last `sinceDays` days. Intended to
     /// be called once, right after authorization is granted.
     public func runInitialSync(
@@ -67,6 +80,10 @@ public final class AnchoredQuerySync {
         anchorStore: AnchorStore,
         sinceDays: Int = 90
     ) async throws {
+        guard !isSyncing else { return }
+        isSyncing = true
+        defer { isSyncing = false }
+
         let startDate = Calendar.current.date(byAdding: .day, value: -sinceDays, to: Date())
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: nil, options: .strictStartDate)
         try await syncGlucose(healthStore: healthStore, context: context, anchorStore: anchorStore, predicate: predicate)
@@ -85,6 +102,10 @@ public final class AnchoredQuerySync {
         context: ModelContext,
         anchorStore: AnchorStore
     ) async throws {
+        guard !isSyncing else { return }
+        isSyncing = true
+        defer { isSyncing = false }
+
         try await syncGlucose(healthStore: healthStore, context: context, anchorStore: anchorStore, predicate: nil)
         try await syncCarbs(healthStore: healthStore, context: context, anchorStore: anchorStore, predicate: nil)
         try await syncInsulin(healthStore: healthStore, context: context, anchorStore: anchorStore, predicate: nil)
