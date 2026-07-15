@@ -38,6 +38,16 @@ public final class UserDefaultsAnchorStore: AnchorStore {
 ///
 /// Not an actor: callers are expected to invoke this against a `ModelContext`
 /// they already own the isolation of (typically the app's main context).
+/// Pinned to the main actor deliberately: every method here touches a
+/// SwiftData `ModelContext`, which (like Core Data's `NSManagedObjectContext`)
+/// is not safe to use from an arbitrary thread. `BackgroundDeliveryManager`
+/// invokes this from an `HKObserverQuery` completion handler, which HealthKit
+/// calls back on an unspecified (often background/concurrent) queue -- without
+/// this isolation, that path crashes (SIGABRT) the first time it races the
+/// main thread's own use of the same context. Marking the type `@MainActor`
+/// makes every `await` call into it hop to the main actor automatically,
+/// regardless of what thread the caller happens to be running on.
+@MainActor
 public final class AnchoredQuerySync {
     public init() {}
 
