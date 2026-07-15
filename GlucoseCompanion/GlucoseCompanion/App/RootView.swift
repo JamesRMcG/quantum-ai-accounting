@@ -13,12 +13,13 @@ struct RootView: View {
     var body: some View {
         Group {
             if let userSettings = settings.first {
-                // Both must be true: accepting the disclaimer alone isn't
-                // enough to unlock the app -- target range / max dose setup
-                // (`isConfigured`) still gates the bolus suggestion feature,
-                // and staying in OnboardingFlow until both are set keeps the
-                // guided tour from being torn down partway through.
-                if userSettings.hasAcceptedDisclaimer && userSettings.isConfigured {
+                // Gate on `hasCompletedOnboarding`, NOT `isConfigured` --
+                // `isConfigured` flips true partway through onboarding (right
+                // after target range/max dose are saved) so the bolus
+                // calculator can be used, but that must not tear down the
+                // rest of the onboarding flow (baseline ratios, optional
+                // Dexcom connect) before the user reaches it.
+                if userSettings.hasAcceptedDisclaimer && userSettings.hasCompletedOnboarding {
                     MainTabView()
                 } else {
                     OnboardingFlow()

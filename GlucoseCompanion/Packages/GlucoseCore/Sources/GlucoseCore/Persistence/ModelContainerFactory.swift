@@ -8,7 +8,9 @@ public enum ModelContainerFactory {
             CarbEntry.self,
             InsulinDose.self,
             TimeOfDayProfile.self,
-            UserSettings.self
+            UserSettings.self,
+            WorkoutSession.self,
+            StepSample.self
         ])
     }
 

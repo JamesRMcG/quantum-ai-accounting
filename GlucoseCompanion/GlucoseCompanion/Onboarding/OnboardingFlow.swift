@@ -3,19 +3,24 @@ import SwiftData
 import GlucoseCore
 
 /// Steps a first-run user through disclaimer -> HealthKit permission ->
-/// target range setup -> optional Dexcom connect.
+/// target range setup -> optional baseline carb ratios -> optional Dexcom
+/// connect.
 ///
 /// This view does not dismiss itself: `RootView` watches
-/// `hasAcceptedDisclaimer && isConfigured` on the singleton `UserSettings`
-/// row via `@Query` and switches to `MainTabView` automatically once both are
-/// true, which happens at the end of the target-range step. The Dexcom step
-/// is purely optional and skippable since Dexcom Share is a backup path, not
-/// a requirement -- HealthKit alone already covers the primary sync story.
+/// `hasAcceptedDisclaimer && hasCompletedOnboarding` on the singleton
+/// `UserSettings` row via `@Query` and switches to `MainTabView` once both
+/// are true. Note this is deliberately NOT `isConfigured` -- that flag flips
+/// true right after the target-range step (so the bolus calculator can be
+/// used) but onboarding must keep going past that point, so
+/// `hasCompletedOnboarding` is only set at the very end of this flow
+/// (`finishOnboarding()`). The baseline-ratios and Dexcom steps are both
+/// purely optional/skippable.
 struct OnboardingFlow: View {
     private enum Step {
         case disclaimer
         case healthKit
         case targetRange
+        case baselineRatios
         case dexcom
     }
 
@@ -42,15 +47,18 @@ struct OnboardingFlow: View {
                         // standalone here, it needs this `Form` wrapper.
                         Form {
                             TargetRangeSettingsView(settings: settings, onSave: {
-                                step = .dexcom
+                                step = .baselineRatios
                             })
                         }
                     } else {
                         ProgressView()
                     }
 
+                case .baselineRatios:
+                    BaselineRatiosView(onContinue: { step = .dexcom })
+
                 case .dexcom:
-                    DexcomLoginView(onSkip: { /* Onboarding is already complete by this point. */ })
+                    DexcomLoginView(onSkip: finishOnboarding)
                 }
             }
             .navigationTitle(title(for: step))
@@ -63,8 +71,15 @@ struct OnboardingFlow: View {
         case .disclaimer: return ""
         case .healthKit: return "Health Access"
         case .targetRange: return "Target Range"
+        case .baselineRatios: return "Baseline Ratios"
         case .dexcom: return "Connect Dexcom"
         }
+    }
+
+    private func finishOnboarding() {
+        guard let settings = settingsRows.first else { return }
+        settings.hasCompletedOnboarding = true
+        try? modelContext.save()
     }
 }
 

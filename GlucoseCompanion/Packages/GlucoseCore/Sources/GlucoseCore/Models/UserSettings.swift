@@ -22,6 +22,15 @@ public final class UserSettings {
     /// Absolute floor below which the bolus calculator always refuses to
     /// suggest a dose, regardless of target range (see SafetyGuardrails).
     public var lowGlucoseSafetyFloorMgdl: Double
+    /// Set only at the very end of `OnboardingFlow`, deliberately separate
+    /// from `isConfigured` -- `isConfigured` flips true partway through the
+    /// flow (as soon as target range/max dose are saved) so the bolus
+    /// calculator can be used, but `RootView` must keep showing the rest of
+    /// onboarding (baseline ratios, optional Dexcom connect) until this flag
+    /// is true, not just `isConfigured`. Inline default (rather than only an
+    /// init default) so SwiftData can lightweight-migrate existing installs
+    /// that predate this field.
+    public var hasCompletedOnboarding: Bool = false
 
     public init(
         targetRangeLowMgdl: Double = 70,
@@ -34,7 +43,8 @@ public final class UserSettings {
         hasAcceptedDisclaimer: Bool = false,
         disclaimerAcceptedAt: Date? = nil,
         isConfigured: Bool = false,
-        lowGlucoseSafetyFloorMgdl: Double = 80
+        lowGlucoseSafetyFloorMgdl: Double = 80,
+        hasCompletedOnboarding: Bool = false
     ) {
         self.targetRangeLowMgdl = targetRangeLowMgdl
         self.targetRangeHighMgdl = targetRangeHighMgdl
@@ -47,6 +57,7 @@ public final class UserSettings {
         self.disclaimerAcceptedAt = disclaimerAcceptedAt
         self.isConfigured = isConfigured
         self.lowGlucoseSafetyFloorMgdl = lowGlucoseSafetyFloorMgdl
+        self.hasCompletedOnboarding = hasCompletedOnboarding
     }
 
     public var targetMidpointMgdl: Double {

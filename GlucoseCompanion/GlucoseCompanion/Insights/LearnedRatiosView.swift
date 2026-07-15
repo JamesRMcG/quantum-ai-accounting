@@ -11,6 +11,7 @@ struct LearnedRatiosView: View {
     @Query private var insulinDoses: [InsulinDose]
     @Query private var glucoseReadings: [GlucoseReading]
     @Query private var settingsRows: [UserSettings]
+    @Query private var workouts: [WorkoutSession]
 
     @State private var isRecalculating = false
     @State private var recalculationError: String?
@@ -50,12 +51,19 @@ struct LearnedRatiosView: View {
         isRecalculating = true
         recalculationError = nil
 
+        // Meals that overlap a workout can't be attributed to diet/insulin
+        // alone -- exercise itself shifts glucose independent of the carb
+        // ratio being learned, so those windows are excluded from the fit
+        // rather than silently treated as clean data.
+        let workoutWindows = workouts.map(\.interval)
+
         let snapshots = RatioLearningEngine.recompute(
             profiles: profiles,
             carbEntries: carbEntries,
             insulinDoses: insulinDoses,
             glucoseReadings: glucoseReadings,
-            targetMidpointMgdl: settings.targetMidpointMgdl
+            targetMidpointMgdl: settings.targetMidpointMgdl,
+            excludeWindows: workoutWindows
         )
 
         // RatioLearningEngine never persists -- it returns brand-new snapshot

@@ -30,8 +30,8 @@ public final class UserDefaultsAnchorStore: AnchorStore {
     }
 }
 
-/// Syncs the three GlucoseCore-backed Health categories (glucose, carbs,
-/// insulin) via `HKAnchoredObjectQuery`, deduping against records that
+/// Syncs the GlucoseCore-backed Health categories (glucose, carbs, insulin,
+/// workouts, steps) via `HKAnchoredObjectQuery`, deduping against records that
 /// already exist locally -- whether they arrived from a previous HealthKit
 /// sync or were logged directly in-app and already carry a `healthKitUUID`
 /// from having been written back to Health.
@@ -45,6 +45,8 @@ public final class AnchoredQuerySync {
         static let glucose = "glucose"
         static let carbs = "carbs"
         static let insulin = "insulin"
+        static let workouts = "workouts"
+        static let steps = "steps"
     }
 
     /// Bounded first-run sync covering the last `sinceDays` days. Intended to
@@ -60,6 +62,8 @@ public final class AnchoredQuerySync {
         try await syncGlucose(healthStore: healthStore, context: context, anchorStore: anchorStore, predicate: predicate)
         try await syncCarbs(healthStore: healthStore, context: context, anchorStore: anchorStore, predicate: predicate)
         try await syncInsulin(healthStore: healthStore, context: context, anchorStore: anchorStore, predicate: predicate)
+        try await syncWorkouts(healthStore: healthStore, context: context, anchorStore: anchorStore, predicate: predicate)
+        try await syncSteps(healthStore: healthStore, context: context, anchorStore: anchorStore, predicate: predicate)
     }
 
     /// Fetches only what changed since the anchor each category persisted
@@ -74,6 +78,8 @@ public final class AnchoredQuerySync {
         try await syncGlucose(healthStore: healthStore, context: context, anchorStore: anchorStore, predicate: nil)
         try await syncCarbs(healthStore: healthStore, context: context, anchorStore: anchorStore, predicate: nil)
         try await syncInsulin(healthStore: healthStore, context: context, anchorStore: anchorStore, predicate: nil)
+        try await syncWorkouts(healthStore: healthStore, context: context, anchorStore: anchorStore, predicate: nil)
+        try await syncSteps(healthStore: healthStore, context: context, anchorStore: anchorStore, predicate: nil)
     }
 
     // MARK: - Per-category sync
@@ -151,6 +157,58 @@ public final class AnchoredQuerySync {
             existingUUIDs.insert(sample.uuid)
         }
         Self.deleteRecords(InsulinDose.self, matchingHealthKitUUIDs: result.deletedUUIDs, in: context)
+
+        try context.save()
+        Self.saveAnchor(result.newAnchor, anchorStore: anchorStore, key: key)
+    }
+
+    private func syncWorkouts(
+        healthStore: HKHealthStore,
+        context: ModelContext,
+        anchorStore: AnchorStore,
+        predicate: NSPredicate?
+    ) async throws {
+        let key = AnchorKey.workouts
+        let anchor = Self.loadAnchor(anchorStore: anchorStore, key: key)
+        let result = try await Self.runAnchoredQuery(
+            healthStore: healthStore,
+            sampleType: HealthStoreManager.workoutType,
+            anchor: anchor,
+            predicate: predicate
+        )
+
+        var existingUUIDs = try Self.existingHealthKitUUIDs(WorkoutSession.self, in: context)
+        for case let sample as HKWorkout in result.samples where !existingUUIDs.contains(sample.uuid) {
+            context.insert(Self.workoutSession(from: sample))
+            existingUUIDs.insert(sample.uuid)
+        }
+        Self.deleteRecords(WorkoutSession.self, matchingHealthKitUUIDs: result.deletedUUIDs, in: context)
+
+        try context.save()
+        Self.saveAnchor(result.newAnchor, anchorStore: anchorStore, key: key)
+    }
+
+    private func syncSteps(
+        healthStore: HKHealthStore,
+        context: ModelContext,
+        anchorStore: AnchorStore,
+        predicate: NSPredicate?
+    ) async throws {
+        let key = AnchorKey.steps
+        let anchor = Self.loadAnchor(anchorStore: anchorStore, key: key)
+        let result = try await Self.runAnchoredQuery(
+            healthStore: healthStore,
+            sampleType: HealthStoreManager.stepCountType,
+            anchor: anchor,
+            predicate: predicate
+        )
+
+        var existingUUIDs = try Self.existingHealthKitUUIDs(StepSample.self, in: context)
+        for case let sample as HKQuantitySample in result.samples where !existingUUIDs.contains(sample.uuid) {
+            context.insert(Self.stepSample(from: sample))
+            existingUUIDs.insert(sample.uuid)
+        }
+        Self.deleteRecords(StepSample.self, matchingHealthKitUUIDs: result.deletedUUIDs, in: context)
 
         try context.save()
         Self.saveAnchor(result.newAnchor, anchorStore: anchorStore, key: key)
@@ -254,6 +312,56 @@ public final class AnchoredQuerySync {
         }
     }
 
+    private static func workoutSession(from workout: HKWorkout) -> WorkoutSession {
+        // TODO: Apple's newer API is `workout.statistics(for:)`, which reports
+        // per-quantity-type totals and supersedes these convenience
+        // properties -- worth migrating to eventually, but `totalEnergyBurned`
+        // / `totalDistance` are still present and functional today.
+        let energyKcal = workout.totalEnergyBurned?.doubleValue(for: HKUnit.kilocalorie())
+        let distanceMeters = workout.totalDistance?.doubleValue(for: HKUnit.meter())
+        return WorkoutSession(
+            startDate: workout.startDate,
+            endDate: workout.endDate,
+            activityType: activityTypeLabel(for: workout.workoutActivityType),
+            totalEnergyBurnedKcal: energyKcal,
+            totalDistanceMeters: distanceMeters,
+            source: .healthKit,
+            healthKitUUID: workout.uuid
+        )
+    }
+
+    /// Human-readable label for the common activity types this app is
+    /// confident about; HealthKit has ~80 `HKWorkoutActivityType` cases in
+    /// total, so everything else falls back to a generic "Workout" label
+    /// rather than guessing at an exhaustive mapping.
+    private static func activityTypeLabel(for activityType: HKWorkoutActivityType) -> String {
+        switch activityType {
+        case .walking: return "Walking"
+        case .running: return "Running"
+        case .cycling: return "Cycling"
+        case .swimming: return "Swimming"
+        case .hiking: return "Hiking"
+        case .yoga: return "Yoga"
+        case .functionalStrengthTraining: return "Strength Training"
+        case .traditionalStrengthTraining: return "Strength Training"
+        case .elliptical: return "Elliptical"
+        case .rowing: return "Rowing"
+        case .highIntensityIntervalTraining: return "HIIT"
+        case .other: return "Workout"
+        default: return "Workout"
+        }
+    }
+
+    private static func stepSample(from sample: HKQuantitySample) -> StepSample {
+        StepSample(
+            startDate: sample.startDate,
+            endDate: sample.endDate,
+            stepCount: Int(sample.quantity.doubleValue(for: HKUnit.count()).rounded()),
+            source: .healthKit,
+            healthKitUUID: sample.uuid
+        )
+    }
+
     // MARK: - Dedup / delete helpers
 
     private static func existingHealthKitUUIDs(_ type: GlucoseReading.Type, in context: ModelContext) throws -> Set<UUID> {
@@ -268,6 +376,16 @@ public final class AnchoredQuerySync {
 
     private static func existingHealthKitUUIDs(_ type: InsulinDose.Type, in context: ModelContext) throws -> Set<UUID> {
         let descriptor = FetchDescriptor<InsulinDose>(predicate: #Predicate { $0.healthKitUUID != nil })
+        return Set(try context.fetch(descriptor).compactMap(\.healthKitUUID))
+    }
+
+    private static func existingHealthKitUUIDs(_ type: WorkoutSession.Type, in context: ModelContext) throws -> Set<UUID> {
+        let descriptor = FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.healthKitUUID != nil })
+        return Set(try context.fetch(descriptor).compactMap(\.healthKitUUID))
+    }
+
+    private static func existingHealthKitUUIDs(_ type: StepSample.Type, in context: ModelContext) throws -> Set<UUID> {
+        let descriptor = FetchDescriptor<StepSample>(predicate: #Predicate { $0.healthKitUUID != nil })
         return Set(try context.fetch(descriptor).compactMap(\.healthKitUUID))
     }
 
@@ -308,6 +426,36 @@ public final class AnchoredQuerySync {
     ) {
         guard !uuids.isEmpty else { return }
         let descriptor = FetchDescriptor<InsulinDose>(predicate: #Predicate { $0.healthKitUUID != nil })
+        guard let candidates = try? context.fetch(descriptor) else { return }
+        for record in candidates {
+            if let uuid = record.healthKitUUID, uuids.contains(uuid) {
+                context.delete(record)
+            }
+        }
+    }
+
+    private static func deleteRecords(
+        _ type: WorkoutSession.Type,
+        matchingHealthKitUUIDs uuids: Set<UUID>,
+        in context: ModelContext
+    ) {
+        guard !uuids.isEmpty else { return }
+        let descriptor = FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.healthKitUUID != nil })
+        guard let candidates = try? context.fetch(descriptor) else { return }
+        for record in candidates {
+            if let uuid = record.healthKitUUID, uuids.contains(uuid) {
+                context.delete(record)
+            }
+        }
+    }
+
+    private static func deleteRecords(
+        _ type: StepSample.Type,
+        matchingHealthKitUUIDs uuids: Set<UUID>,
+        in context: ModelContext
+    ) {
+        guard !uuids.isEmpty else { return }
+        let descriptor = FetchDescriptor<StepSample>(predicate: #Predicate { $0.healthKitUUID != nil })
         guard let candidates = try? context.fetch(descriptor) else { return }
         for record in candidates {
             if let uuid = record.healthKitUUID, uuids.contains(uuid) {
