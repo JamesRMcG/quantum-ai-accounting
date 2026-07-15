@@ -14,6 +14,7 @@ struct DashboardView: View {
     private var settings: UserSettings? { settingsRows.first }
     private var targetLow: Double { settings?.targetRangeLowMgdl ?? 70 }
     private var targetHigh: Double { settings?.targetRangeHighMgdl ?? 180 }
+    private var glucoseUnit: GlucoseUnit { settings?.glucoseUnit ?? .mgdl }
 
     private var latestReading: GlucoseReading? { allReadings.first }
 
@@ -43,7 +44,8 @@ struct DashboardView: View {
                     GlucoseTrendChartView(
                         readings: chartReadings,
                         targetLow: targetLow,
-                        targetHigh: targetHigh
+                        targetHigh: targetHigh,
+                        unit: glucoseUnit
                     )
                 }
 
@@ -59,12 +61,12 @@ struct DashboardView: View {
         if let reading = latestReading {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text("\(Int(reading.mgdl.rounded()))")
+                    Text(GlucoseFormatting.valueString(mgdl: reading.mgdl, unit: glucoseUnit))
                         .font(.system(size: 64, weight: .bold, design: .rounded))
                     Image(systemName: trendSymbol(for: reading.trend))
                         .font(.title2)
                         .foregroundStyle(.secondary)
-                    Text("mg/dL")
+                    Text(GlucoseFormatting.unitLabel(glucoseUnit))
                         .font(.title3)
                         .foregroundStyle(.secondary)
                 }

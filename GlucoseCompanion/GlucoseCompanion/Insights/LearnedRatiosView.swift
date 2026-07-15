@@ -87,9 +87,12 @@ private struct ProfileCard: View {
     let profile: TimeOfDayProfile
 
     @Environment(\.modelContext) private var modelContext
+    @Query private var settingsRows: [UserSettings]
 
     @State private var carbOverrideText: String = ""
     @State private var correctionOverrideText: String = ""
+
+    private var glucoseUnit: GlucoseUnit { settingsRows.first?.glucoseUnit ?? .mgdl }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -105,14 +108,16 @@ private struct ProfileCard: View {
                 title: "Carb Ratio",
                 learned: profile.learnedCarbRatio,
                 override: profile.userOverrideCarbRatio,
-                unit: "g/u"
+                unitLabel: "g/u",
+                format: { String(format: "%.1f", $0) }
             )
 
             valueRow(
                 title: "Correction Factor",
                 learned: profile.learnedCorrectionFactor,
                 override: profile.userOverrideCorrectionFactor,
-                unit: "mg/dL per u"
+                unitLabel: GlucoseFormatting.perUnitLabel(glucoseUnit),
+                format: { GlucoseFormatting.perUnitValueString(mgdlPerUnit: $0, unit: glucoseUnit) }
             )
 
             if profile.confidence == .insufficientData {
@@ -146,7 +151,7 @@ private struct ProfileCard: View {
             )
 
             overrideRow(
-                placeholder: "Correction override (mg/dL per u)",
+                placeholder: "Correction override (\(GlucoseFormatting.perUnitLabel(glucoseUnit)))",
                 text: $correctionOverrideText,
                 hasOverride: profile.userOverrideCorrectionFactor != nil,
                 onSet: applyCorrectionOverride,
@@ -171,14 +176,20 @@ private struct ProfileCard: View {
     /// number. This is a hard transparency requirement: overrides silently
     /// masking a different learned value would be exactly the kind of hidden
     /// provenance this app must avoid.
-    private func valueRow(title: String, learned: Double?, override: Double?, unit: String) -> some View {
+    private func valueRow(
+        title: String,
+        learned: Double?,
+        override: Double?,
+        unitLabel: String,
+        format: (Double) -> String
+    ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(title)
                     .font(.subheadline.bold())
                 Spacer()
                 if let override {
-                    Text("\(formatted(override)) \(unit)")
+                    Text("\(format(override)) \(unitLabel)")
                         .font(.subheadline.bold())
                     Text("override")
                         .font(.caption2)
@@ -186,7 +197,7 @@ private struct ProfileCard: View {
                         .padding(.vertical, 2)
                         .background(.blue.opacity(0.15), in: Capsule())
                 } else if let learned {
-                    Text("\(formatted(learned)) \(unit)")
+                    Text("\(format(learned)) \(unitLabel)")
                         .font(.subheadline.bold())
                 } else {
                     Text("Not set")
@@ -196,7 +207,7 @@ private struct ProfileCard: View {
             }
             if override != nil {
                 if let learned {
-                    Text("Learned value: \(formatted(learned)) \(unit)")
+                    Text("Learned value: \(format(learned)) \(unitLabel)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -242,7 +253,10 @@ private struct ProfileCard: View {
 
     private func applyCorrectionOverride() {
         guard let value = Double(correctionOverrideText), value > 0 else { return }
-        profile.userOverrideCorrectionFactor = value
+        // The field is entered in whatever unit is currently displayed, but
+        // the model always stores mg/dL per unit -- convert before saving.
+        let mgdlPerUnit = glucoseUnit == .mmolL ? value * GlucoseFormatting.mgdlPerMmol : value
+        profile.userOverrideCorrectionFactor = mgdlPerUnit
         correctionOverrideText = ""
         save()
     }
@@ -255,10 +269,6 @@ private struct ProfileCard: View {
 
     private func save() {
         try? modelContext.save()
-    }
-
-    private func formatted(_ value: Double) -> String {
-        String(format: "%.1f", value)
     }
 
     private func hourLabel(_ hour: Int) -> String {

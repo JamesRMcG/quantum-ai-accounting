@@ -9,6 +9,7 @@ struct GlucoseTrendChartView: View {
     let readings: [GlucoseReading]
     let targetLow: Double
     let targetHigh: Double
+    var unit: GlucoseUnit = .mgdl
 
     private var chronological: [GlucoseReading] {
         readings.sorted { $0.timestamp < $1.timestamp }
@@ -56,6 +57,19 @@ struct GlucoseTrendChartView: View {
                 AxisGridLine()
                 AxisTick()
                 AxisValueLabel(format: .dateTime.hour())
+            }
+        }
+        .chartYAxis {
+            // The chart's underlying data/domain always stays in mg/dL;
+            // only the tick label text is converted for display.
+            AxisMarks { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel {
+                    if let mgdl = value.as(Double.self) {
+                        Text(GlucoseFormatting.valueString(mgdl: mgdl, unit: unit))
+                    }
+                }
             }
         }
         .frame(height: 220)

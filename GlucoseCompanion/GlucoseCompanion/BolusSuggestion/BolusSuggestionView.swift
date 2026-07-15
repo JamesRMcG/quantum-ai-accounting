@@ -24,6 +24,7 @@ struct BolusSuggestionView: View {
     @State private var pendingSuggestionID: UUID?
 
     private var settings: UserSettings? { settingsRows.first }
+    private var glucoseUnit: GlucoseUnit { settings?.glucoseUnit ?? .mgdl }
     private var latestReading: GlucoseReading? { allReadings.first }
 
     private var activeProfile: TimeOfDayProfile? {
@@ -58,7 +59,7 @@ struct BolusSuggestionView: View {
                     HStack {
                         Text("Current glucose")
                         Spacer()
-                        Text("\(Int(latestReading.mgdl.rounded())) mg/dL")
+                        Text(GlucoseFormatting.readingString(mgdl: latestReading.mgdl, unit: glucoseUnit))
                             .foregroundStyle(.secondary)
                     }
                 } else {
@@ -170,7 +171,7 @@ struct BolusSuggestionView: View {
         case .refusedGlucoseTooLow(let currentMgdl):
             Section("Can't Calculate") {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Glucose is too low to suggest a dose (\(Int(currentMgdl.rounded())) mg/dL).")
+                    Text("Glucose is too low to suggest a dose (\(GlucoseFormatting.readingString(mgdl: currentMgdl, unit: glucoseUnit))).")
                         .foregroundStyle(.red)
                     Text("Treat the low first. Do not take insulin right now.")
                         .font(.caption)

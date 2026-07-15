@@ -9,6 +9,7 @@ struct DayBlockBreakdownView: View {
     @Query private var settingsRows: [UserSettings]
 
     private var settings: UserSettings? { settingsRows.first }
+    private var glucoseUnit: GlucoseUnit { settings?.glucoseUnit ?? .mgdl }
 
     private static let analysisWindowDays = 14
 
@@ -52,7 +53,7 @@ struct DayBlockBreakdownView: View {
                     .font(.title3.bold())
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("Avg \(Int(block.averageMgdl.rounded())) mg/dL")
+                    Text("Avg \(GlucoseFormatting.readingString(mgdl: block.averageMgdl, unit: glucoseUnit))")
                         .font(.subheadline)
                     Text("CV \(String(format: "%.0f", block.coefficientOfVariationPercent))%")
                         .font(.caption)

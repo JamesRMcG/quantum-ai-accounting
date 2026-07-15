@@ -37,6 +37,17 @@ struct TargetRangeSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Display Unit") {
+                Picker("Glucose unit", selection: $settings.glucoseUnit) {
+                    Text("mg/dL").tag(GlucoseUnit.mgdl)
+                    Text("mmol/L").tag(GlucoseUnit.mmolL)
+                }
+                .pickerStyle(.segmented)
+                Text("Changes how glucose values are displayed throughout the app. The values you enter below stay in mg/dL regardless of this setting.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Target Glucose Range (mg/dL)") {
                 LabeledContent("Low") {
                     TextField("70", text: $lowText)

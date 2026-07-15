@@ -6,8 +6,11 @@ import GlucoseAnalytics
 
 struct AGPView: View {
     @Query private var readings: [GlucoseReading]
+    @Query private var settingsRows: [UserSettings]
 
     @State private var windowDays: Int = 14
+
+    private var glucoseUnit: GlucoseUnit { settingsRows.first?.glucoseUnit ?? .mgdl }
 
     private var profile: AGPProfile {
         AGPAggregator.aggregate(readings: readings, windowDays: windowDays)
@@ -83,6 +86,18 @@ struct AGPView: View {
                 AxisValueLabel {
                     if let minute = value.as(Int.self) {
                         Text(timeLabel(minuteOfDay: minute))
+                    }
+                }
+            }
+        }
+        .chartYAxis {
+            // Underlying domain/data stays in mg/dL; only tick labels convert.
+            AxisMarks { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel {
+                    if let mgdl = value.as(Double.self) {
+                        Text(GlucoseFormatting.valueString(mgdl: mgdl, unit: glucoseUnit))
                     }
                 }
             }
