@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import GlucoseCore
+import HealthKitSync
 
 /// Explains and requests HealthKit access during onboarding. Denial or
 /// partial denial is never allowed to block the rest of onboarding -- the

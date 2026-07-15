@@ -51,7 +51,7 @@ struct BolusReviewSheet: View {
                         Text("Suggested")
                             .font(.headline)
                         Spacer()
-                        Text("\(formattedUnits(suggestion.suggestedUnits)) u")
+                        Text("\(Self.formattedUnits(suggestion.suggestedUnits)) u")
                             .font(.headline)
                     }
                 }
@@ -109,7 +109,7 @@ struct BolusReviewSheet: View {
         HStack {
             Text(label)
             Spacer()
-            Text("\(value >= 0 ? "" : "-")\(formattedUnits(abs(value))) u")
+            Text("\(value >= 0 ? "" : "-")\(Self.formattedUnits(abs(value))) u")
                 .foregroundStyle(.secondary)
         }
     }
@@ -126,9 +126,9 @@ struct BolusReviewSheet: View {
     private func warningText(_ warning: BolusWarning) -> String {
         switch warning {
         case .exceedsMaxDose(let clampedFrom):
-            return "Raw calculation was \(formattedUnits(clampedFrom))u, capped to your configured max dose."
+            return "Raw calculation was \(Self.formattedUnits(clampedFrom))u, capped to your configured max dose."
         case .unusuallyHighVersusHistory(let recentAverage):
-            return "This is unusually high vs. your recent average of \(formattedUnits(recentAverage))u."
+            return "This is unusually high vs. your recent average of \(Self.formattedUnits(recentAverage))u."
         case .lowConfidenceProfile(let confidence):
             return "This time block's ratios are \(confidenceLabel(confidence)) confidence -- double check before dosing."
         }
