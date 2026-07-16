@@ -108,30 +108,15 @@ private struct ProfileCard: View {
 
     private var glucoseUnit: GlucoseUnit { settingsRows.first?.glucoseUnit ?? .mgdl }
 
-    /// Meal events whose anchor time falls within this specific block's hour
-    /// range -- unlike `ActivityTrendView` (which looks at all meals), the
-    /// "By Activity Level" subsection below needs per-block estimates, so
-    /// events are filtered to this block before activity contexts/estimates
-    /// are built.
-    private var blockMealEvents: [MealEvent] {
-        let allEvents = MealExcursionMatcher.extractEvents(
-            carbEntries: carbEntries,
-            insulinDoses: insulinDoses,
-            glucoseReadings: glucoseReadings,
-            excludeWindows: workouts.map(\.interval)
-        )
-        return allEvents.filter { profile.contains(hour: Calendar.current.component(.hour, from: $0.anchorTime)) }
-    }
+    @State private var blockActivityProfiles: [ActivityAdjustedProfile] = []
 
-    private var blockActivityContexts: [MealActivityContext] {
-        ActivityContextBuilder.buildContexts(mealEvents: blockMealEvents, stepSamples: stepSamples)
-    }
-
-    private var blockActivityProfiles: [ActivityAdjustedProfile] {
-        ActivityAdjustedRatioEstimator.estimate(
-            contexts: blockActivityContexts,
-            targetMidpointMgdl: settingsRows.first?.targetMidpointMgdl ?? 125
-        )
+    /// Same rationale as `ActivityTrendView.dataFingerprint`: this ran a full
+    /// meal-event match (O(carbs x boluses)) plus a regression as a bare
+    /// computed property, re-executing on every render of every one of the
+    /// (typically 4) `ProfileCard` instances in this list -- not just when
+    /// the data actually changed.
+    private var dataFingerprint: String {
+        "\(carbEntries.count)-\(insulinDoses.count)-\(glucoseReadings.count)-\(stepSamples.count)-\(workouts.count)"
     }
 
     var body: some View {
@@ -203,6 +188,24 @@ private struct ProfileCard: View {
             activityAdjustedSection
         }
         .padding(.vertical, 4)
+        .task(id: dataFingerprint) {
+            recomputeActivityProfiles()
+        }
+    }
+
+    private func recomputeActivityProfiles() {
+        let allEvents = MealExcursionMatcher.extractEvents(
+            carbEntries: carbEntries,
+            insulinDoses: insulinDoses,
+            glucoseReadings: glucoseReadings,
+            excludeWindows: workouts.map(\.interval)
+        )
+        let blockEvents = allEvents.filter { profile.contains(hour: Calendar.current.component(.hour, from: $0.anchorTime)) }
+        let contexts = ActivityContextBuilder.buildContexts(mealEvents: blockEvents, stepSamples: stepSamples)
+        blockActivityProfiles = ActivityAdjustedRatioEstimator.estimate(
+            contexts: contexts,
+            targetMidpointMgdl: settingsRows.first?.targetMidpointMgdl ?? 125
+        )
     }
 
     /// Purely informational context split by activity level around meals in

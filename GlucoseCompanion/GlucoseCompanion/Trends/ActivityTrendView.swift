@@ -23,28 +23,23 @@ struct ActivityTrendView: View {
     private var settings: UserSettings? { settingsRows.first }
     private var glucoseUnit: GlucoseUnit { settings?.glucoseUnit ?? .mgdl }
 
-    private var mealEvents: [MealEvent] {
-        MealExcursionMatcher.extractEvents(
-            carbEntries: carbEntries,
-            insulinDoses: insulinDoses,
-            glucoseReadings: glucoseReadings,
-            excludeWindows: workouts.map(\.interval)
-        )
-    }
+    @State private var chartPoints: [ActivityGlucosePoint] = []
+    @State private var activityProfiles: [ActivityAdjustedProfile] = []
 
-    private var contexts: [MealActivityContext] {
-        ActivityContextBuilder.buildContexts(mealEvents: mealEvents, stepSamples: stepSamples)
-    }
-
-    private var chartPoints: [ActivityGlucosePoint] {
-        ActivityTrendBuilder.buildPoints(contexts: contexts).filter { $0.glucoseExcursionMgdl != nil }
-    }
-
-    private var activityProfiles: [ActivityAdjustedProfile] {
-        ActivityAdjustedRatioEstimator.estimate(
-            contexts: contexts,
-            targetMidpointMgdl: settings?.targetMidpointMgdl ?? 125
-        )
+    /// A cheap proxy for "has the underlying data changed." Rebuilding
+    /// `chartPoints`/`activityProfiles` means re-running meal-event matching
+    /// -- an O(carbs x boluses) scan over the person's full history -- plus
+    /// two regressions. Doing that as bare computed properties referenced
+    /// from `body` re-ran the whole pipeline on every SwiftUI render,
+    /// including ones triggered by completely unrelated state changes (e.g.
+    /// a background HealthKit sync completing while this tab happened to be
+    /// visible). `.task(id:)` below only recomputes when this fingerprint
+    /// actually changes. Row counts are an imprecise signal -- an in-place
+    /// edit with no count change wouldn't trigger a refresh -- but match
+    /// this app's actual usage (almost all writes are appends) without
+    /// needing a real versioning scheme.
+    private var dataFingerprint: String {
+        "\(carbEntries.count)-\(insulinDoses.count)-\(glucoseReadings.count)-\(stepSamples.count)-\(workouts.count)"
     }
 
     var body: some View {
@@ -77,6 +72,24 @@ struct ActivityTrendView: View {
             }
             .padding()
         }
+        .task(id: dataFingerprint) {
+            recompute()
+        }
+    }
+
+    private func recompute() {
+        let mealEvents = MealExcursionMatcher.extractEvents(
+            carbEntries: carbEntries,
+            insulinDoses: insulinDoses,
+            glucoseReadings: glucoseReadings,
+            excludeWindows: workouts.map(\.interval)
+        )
+        let contexts = ActivityContextBuilder.buildContexts(mealEvents: mealEvents, stepSamples: stepSamples)
+        chartPoints = ActivityTrendBuilder.buildPoints(contexts: contexts).filter { $0.glucoseExcursionMgdl != nil }
+        activityProfiles = ActivityAdjustedRatioEstimator.estimate(
+            contexts: contexts,
+            targetMidpointMgdl: settings?.targetMidpointMgdl ?? 125
+        )
     }
 
     private var chart: some View {

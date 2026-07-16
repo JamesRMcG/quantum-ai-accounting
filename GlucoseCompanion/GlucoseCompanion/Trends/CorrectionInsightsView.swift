@@ -27,46 +27,18 @@ struct CorrectionInsightsView: View {
     private var settings: UserSettings? { settingsRows.first }
     private var glucoseUnit: GlucoseUnit { settings?.glucoseUnit ?? .mgdl }
 
-    private var mealEvents: [MealEvent] {
-        MealExcursionMatcher.extractEvents(
-            carbEntries: carbEntries,
-            insulinDoses: insulinDoses,
-            glucoseReadings: glucoseReadings
-        )
-    }
+    @State private var withActivityEvents: [CorrectionEvent] = []
+    @State private var withoutActivityEvents: [CorrectionEvent] = []
+    @State private var sensitivity = CorrectionSensitivityEstimate(withActivity: nil, withoutActivity: nil)
+    @State private var activityTarget = ActivityTargetSuggestion(medianSuccessfulSteps: nil, sampleCount: 0)
 
-    private var correctionEvents: [CorrectionEvent] {
-        guard let settings else { return [] }
-        return CorrectionEventExtractor.extractEvents(
-            insulinDoses: insulinDoses,
-            glucoseReadings: glucoseReadings,
-            stepSamples: stepSamples,
-            workouts: workouts,
-            mealEvents: mealEvents,
-            targetRangeLowMgdl: settings.targetRangeLowMgdl,
-            targetRangeHighMgdl: settings.targetRangeHighMgdl,
-            lowGlucoseSafetyFloorMgdl: settings.lowGlucoseSafetyFloorMgdl,
-            insulinActionDurationMinutes: settings.insulinActionDurationMinutes
-        )
-    }
-
-    private var withActivityEvents: [CorrectionEvent] {
-        correctionEvents.filter { $0.stepsAfterWindow > 0 || $0.hadWorkoutAfter }
-    }
-
-    private var withoutActivityEvents: [CorrectionEvent] {
-        correctionEvents.filter { !($0.stepsAfterWindow > 0 || $0.hadWorkoutAfter) }
-    }
-
-    private var sensitivity: CorrectionSensitivityEstimate {
-        CorrectionSensitivityEstimator.estimate(
-            events: correctionEvents,
-            targetMidpointMgdl: settings?.targetMidpointMgdl ?? 125
-        )
-    }
-
-    private var activityTarget: ActivityTargetSuggestion {
-        ActivityTargetEstimator.suggest(events: correctionEvents)
+    /// Same rationale as `ActivityTrendView.dataFingerprint`: this pipeline
+    /// re-runs meal-event matching (O(carbs x boluses)) plus correction-event
+    /// extraction and two more regressions -- expensive enough that it must
+    /// only run when the underlying data actually changes, not on every
+    /// SwiftUI render.
+    private var dataFingerprint: String {
+        "\(carbEntries.count)-\(insulinDoses.count)-\(glucoseReadings.count)-\(stepSamples.count)-\(workouts.count)"
     }
 
     var body: some View {
@@ -100,6 +72,44 @@ struct CorrectionInsightsView: View {
             }
             .padding()
         }
+        .task(id: dataFingerprint) {
+            recompute()
+        }
+    }
+
+    private func recompute() {
+        guard let settings else {
+            withActivityEvents = []
+            withoutActivityEvents = []
+            sensitivity = CorrectionSensitivityEstimate(withActivity: nil, withoutActivity: nil)
+            activityTarget = ActivityTargetSuggestion(medianSuccessfulSteps: nil, sampleCount: 0)
+            return
+        }
+
+        let mealEvents = MealExcursionMatcher.extractEvents(
+            carbEntries: carbEntries,
+            insulinDoses: insulinDoses,
+            glucoseReadings: glucoseReadings
+        )
+        let correctionEvents = CorrectionEventExtractor.extractEvents(
+            insulinDoses: insulinDoses,
+            glucoseReadings: glucoseReadings,
+            stepSamples: stepSamples,
+            workouts: workouts,
+            mealEvents: mealEvents,
+            targetRangeLowMgdl: settings.targetRangeLowMgdl,
+            targetRangeHighMgdl: settings.targetRangeHighMgdl,
+            lowGlucoseSafetyFloorMgdl: settings.lowGlucoseSafetyFloorMgdl,
+            insulinActionDurationMinutes: settings.insulinActionDurationMinutes
+        )
+
+        withActivityEvents = correctionEvents.filter { $0.stepsAfterWindow > 0 || $0.hadWorkoutAfter }
+        withoutActivityEvents = correctionEvents.filter { !($0.stepsAfterWindow > 0 || $0.hadWorkoutAfter) }
+        sensitivity = CorrectionSensitivityEstimator.estimate(
+            events: correctionEvents,
+            targetMidpointMgdl: settings.targetMidpointMgdl
+        )
+        activityTarget = ActivityTargetEstimator.suggest(events: correctionEvents)
     }
 
     // MARK: - Safety banner
